@@ -81,7 +81,10 @@ input[type=range]{padding:0}
   <div class="card">
     <video id="camVideo" autoplay muted playsinline></video>
     <div id="camSetup">
-      <label>PIN de acceso (4 a 8 dígitos)</label>
+      <label>Código de la cámara (lo eliges tú y no cambia)</label>
+      <input id="camCodeIn" maxlength="24" autocapitalize="characters" autocomplete="off" placeholder="Ej: CASA-ANTONIO-7391">
+      <p class="mut" style="margin:6px 0 0">De 6 a 24 caracteres: letras, números y guiones. Si lo dejas vacío se crea uno aleatorio y se queda fijo. Haz que sea difícil de adivinar: junto con el PIN es lo que protege tu cámara.</p>
+      <label>PIN de acceso (4 a 8 dígitos; mejor 6 o más)</label>
       <input id="pin" inputmode="numeric" maxlength="8" placeholder="1234">
       <label>Calidad del vídeo (menos calidad = menos datos)</label>
       <select id="qual">
@@ -186,6 +189,8 @@ $('backView').onclick = $('backCam').onclick;
 
 /* ============ MODO CÁMARA ============ */
 let peer, stream, facing = 'environment', wakeLock, pinValue = '', code = '';
+let fixedCode = '', idRetries = 0, fails = 0, lockUntil = 0;
+try { const sc = localStorage.getItem('vigia-camcode'); if (sc) $('camCodeIn').value = sc; } catch {}
 const authed = new Set();      // conexiones de datos autenticadas
 const calls = [];              // llamadas activas
 let torchOn = false;
@@ -232,6 +237,11 @@ async function applyQuality(k) {
 $('startCam').onclick = async () => {
   pinValue = $('pin').value.trim();
   qual = $('qual').value;
+  let cc = $('camCodeIn').value.trim().toUpperCase();
+  if (!cc) cc = rndCode();
+  if (!/^[A-Z0-9][A-Z0-9-]{4,22}[A-Z0-9]$/.test(cc)) return alert('El código debe tener entre 6 y 24 caracteres: letras, números y guiones (sin empezar ni acabar en guion).');
+  fixedCode = cc; $('camCodeIn').value = cc;
+  try { localStorage.setItem('vigia-camcode', cc); } catch {}
   if (!/^\d{4,8}$/.test(pinValue)) return alert('El PIN debe tener entre 4 y 8 dígitos.');
   try {
     stream = await getStream();
@@ -252,20 +262,29 @@ $('startCam').onclick = async () => {
 };
 
 async function startPeer() {
-  code = rndCode();
+  code = fixedCode;
   peer = new Peer(PREFIX + code, await iceOpts());
-  peer.on('open', () => { $('camCode').textContent = code; $('camStatus').textContent = 'En línea'; });
+  peer.on('open', () => { idRetries = 0; $('camCode').textContent = code; $('camStatus').textContent = 'En línea'; });
   peer.on('disconnected', () => { $('camStatus').textContent = 'Reconectando…'; peer.reconnect(); });
   peer.on('error', e => {
-    if (e.type === 'unavailable-id') { peer.destroy(); startPeer(); }
+    if (e.type === 'unavailable-id') {
+      peer.destroy();
+      if (++idRetries <= 12) { $('camStatus').textContent = 'Código en uso, reintentando… (' + idRetries + '/12)'; setTimeout(startPeer, 5000); }
+      else $('camStatus').textContent = 'Ese código ya lo usa otra cámara. Sal y elige otro.';
+    }
     else $('camStatus').textContent = 'Error: ' + e.type;
   });
   peer.on('connection', conn => {
     let ok = false;
     conn.on('data', async msg => {
       if (!ok) {
+        if (Date.now() < lockUntil) {
+          conn.send({ type: 'auth', ok: false, locked: true });
+          setTimeout(() => conn.close(), 300);
+          return;
+        }
         if (msg.type === 'auth' && msg.pin === pinValue) {
-          ok = true; authed.add(conn); updateViewers();
+          fails = 0; ok = true; authed.add(conn); updateViewers();
           conn.send({ type: 'auth', ok: true });
           conn.send({ type: 'blackState', on: !!$('blackout') });
           conn.send({ type: 'qualityState', q: qual });
@@ -274,6 +293,7 @@ async function startPeer() {
           setTimeout(applyBitrate, 1500); setTimeout(applyBitrate, 5000);
           call.on('close', () => { const i = calls.indexOf(call); if (i > -1) calls.splice(i, 1); });
         } else {
+          if (++fails >= 5) { lockUntil = Date.now() + 10 * 60 * 1000; fails = 0; }
           conn.send({ type: 'auth', ok: false });
           setTimeout(() => conn.close(), 300);
         }
@@ -478,6 +498,7 @@ $('connect').onclick = async () => {
   const c = $('vCode').value.trim().toUpperCase(), pin = $('vPin').value.trim();
   if (!c || !pin) return ($('vMsg').textContent = 'Introduce código y PIN.');
   $('vMsg').textContent = 'Conectando…'; $('connect').disabled = true;
+  try { localStorage.setItem('vigia-lastcode', c); } catch {}
   vpeer = new Peer(await iceOpts());
   vpeer.on('error', e => { $('vMsg').textContent = e.type === 'peer-unavailable' ? 'No se encuentra esa cámara. Comprueba el código.' : 'Error: ' + e.type; $('connect').disabled = false; });
   vpeer.on('open', () => {
@@ -516,7 +537,7 @@ function watchConn(pc) {
 }
 
 function onViewerData(m) {
-  if (m.type === 'auth' && !m.ok) { $('vMsg').textContent = 'PIN incorrecto.'; $('connect').disabled = false; }
+  if (m.type === 'auth' && !m.ok) { $('vMsg').textContent = m.locked ? 'Demasiados intentos fallidos. Espera 10 minutos.' : 'PIN incorrecto.'; $('connect').disabled = false; }
   if (m.type === 'motion') {
     const box = $('alertBox'); const t = new Date(m.t).toLocaleTimeString();
     box.innerHTML = '<div class="alert">🚶 Movimiento detectado · ' + t + '</div>';
@@ -594,6 +615,7 @@ $('vRec').onclick = () => {
 /* ============ ENLACE DIRECTO + PWA ============ */
 const q = new URLSearchParams(location.search).get('v');
 if (q) { show('view'); $('vCode').value = q.toUpperCase(); }
+else { try { const lc = localStorage.getItem('vigia-lastcode'); if (lc) $('vCode').value = lc; } catch {} }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
