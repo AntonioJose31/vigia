@@ -24,6 +24,7 @@ input{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);ba
 label{display:block;color:var(--mut);font-size:13px;margin:10px 0 4px}
 video{width:100%;background:#000;border-radius:12px;max-height:60dvh}
 .hide{display:none!important}
+select{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:#0f1115;color:var(--tx);font-size:16px}
 #blackout{position:fixed;inset:0;background:#000;z-index:9999;display:flex;align-items:flex-end;justify-content:center;padding-bottom:24px;color:#222;font-size:12px}
 .mut{color:var(--mut);font-size:14px}
 .code{font-size:32px;letter-spacing:4px;font-weight:700;text-align:center;margin:8px 0}
@@ -70,6 +71,12 @@ input[type=range]{padding:0}
     <div id="camSetup">
       <label>PIN de acceso (4 a 8 dígitos)</label>
       <input id="pin" inputmode="numeric" maxlength="8" placeholder="1234">
+      <label>Calidad del vídeo (menos calidad = menos datos)</label>
+      <select id="qual">
+        <option value="low">Baja · 320×240 · ahorra más datos</option>
+        <option value="mid" selected>Media · 640×480</option>
+        <option value="high">Alta · 1280×720 · gasta más</option>
+      </select>
       <button id="startCam" style="width:100%;margin-top:12px">Iniciar cámara</button>
     </div>
     <div id="camLive" class="hide">
@@ -111,6 +118,12 @@ input[type=range]{padding:0}
     <video id="remote" autoplay playsinline></video>
     <p class="mut" style="margin:8px 0 0">Conexión: <span class="badge" id="connType">detectando…</span></p>
     <p class="mut" style="margin:6px 0 0">Pantalla de la cámara: <span class="badge" id="blackState">comprobando…</span></p>
+    <label>Calidad del vídeo (menos calidad = menos datos)</label>
+    <select id="vQual">
+      <option value="low">Baja · ahorra más datos</option>
+      <option value="mid">Media</option>
+      <option value="high">Alta · gasta más</option>
+    </select>
     <div class="row">
       <button class="sec" id="vSwap">🔄 Cámara</button>
       <button class="sec" id="vTorch">🔦 Linterna</button>
@@ -165,15 +178,47 @@ const calls = [];              // llamadas activas
 let torchOn = false;
 let sirenCtx = null, sirenTimer = null;
 
+// Presets de calidad: resolución, fotogramas por segundo y tope de bitrate (kbps).
+const QUAL = {
+  low:  { w: 320,  h: 240, fps: 10, kbps: 150 },
+  mid:  { w: 640,  h: 480, fps: 15, kbps: 400 },
+  high: { w: 1280, h: 720, fps: 30, kbps: 1500 }
+};
+let qual = 'mid';
+
 async function getStream() {
+  const q = QUAL[qual];
   return navigator.mediaDevices.getUserMedia({
-    video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
+    video: { facingMode: facing, width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: q.fps } },
     audio: true
   });
 }
 
+// Limita el bitrate que se envía a cada visor (es lo que más reduce el gasto de datos/TURN).
+function applyBitrate() {
+  calls.forEach(c => c.peerConnection?.getSenders().forEach(async s => {
+    if (s.track?.kind !== 'video') return;
+    try {
+      const p = s.getParameters();
+      if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+      p.encodings[0].maxBitrate = QUAL[qual].kbps * 1000;
+      await s.setParameters(p);
+    } catch {}
+  }));
+}
+
+async function applyQuality(k) {
+  if (!QUAL[k]) return;
+  qual = k; $('qual').value = k;
+  const q = QUAL[k], t = stream?.getVideoTracks()[0];
+  try { await t?.applyConstraints({ width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: q.fps } }); } catch {}
+  applyBitrate();
+  broadcast({ type: 'qualityState', q: k });
+}
+
 $('startCam').onclick = async () => {
   pinValue = $('pin').value.trim();
+  qual = $('qual').value;
   if (!/^\d{4,8}$/.test(pinValue)) return alert('El PIN debe tener entre 4 y 8 dígitos.');
   try {
     stream = await getStream();
@@ -209,8 +254,10 @@ async function startPeer() {
           ok = true; authed.add(conn); updateViewers();
           conn.send({ type: 'auth', ok: true });
           conn.send({ type: 'blackState', on: !!$('blackout') });
+          conn.send({ type: 'qualityState', q: qual });
           const call = peer.call(conn.peer, stream);
           calls.push(call);
+          setTimeout(applyBitrate, 1500); setTimeout(applyBitrate, 5000);
           call.on('close', () => { const i = calls.indexOf(call); if (i > -1) calls.splice(i, 1); });
         } else {
           conn.send({ type: 'auth', ok: false });
@@ -232,6 +279,7 @@ async function handleCmd(msg, conn) {
   if (msg.type === 'torch') toggleTorch();
   if (msg.type === 'siren') siren();
   if (msg.type === 'black') toggleBlack();
+  if (msg.type === 'quality') applyQuality(msg.q);
   if (msg.type === 'snap') {
     const c = document.createElement('canvas'); const v = $('camVideo');
     c.width = v.videoWidth; c.height = v.videoHeight; c.getContext('2d').drawImage(v, 0, 0);
@@ -403,6 +451,7 @@ function onViewerData(m) {
     $('blackState').classList.toggle('on', !m.on);
     $('vBlack').textContent = m.on ? '💡 Encender pantalla (cámara)' : '⬛ Pantalla negra (cámara)';
   }
+  if (m.type === 'qualityState') $('vQual').value = m.q;
   if (m.type === 'snap') { const a = document.createElement('a'); a.href = m.data; a.download = 'foto-' + Date.now() + '.jpg'; a.click(); }
 }
 
@@ -418,6 +467,7 @@ $('vSwap').onclick = () => vconn.send({ type: 'swap' });
 $('vTorch').onclick = () => vconn.send({ type: 'torch' });
 $('vSiren').onclick = () => vconn.send({ type: 'siren' });
 $('vBlack').onclick = () => vconn.send({ type: 'black' });
+$('vQual').onchange = () => vconn.send({ type: 'quality', q: $('vQual').value });
 $('vSnap').onclick = () => vconn.send({ type: 'snap' });
 $('vFull').onclick = () => $('remote').requestFullscreen?.();
 $('vMute').onclick = () => {
