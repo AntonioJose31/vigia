@@ -62,6 +62,18 @@ input[type=range]{padding:0}
     </div>
     <p class="mut" id="turnMsg"></p>
   </div>
+  <div class="card">
+    <b>📨 Avisos por Telegram (opcional)</b>
+    <p class="mut">Hazlo en el teléfono que hace de cámara. Al detectar movimiento enviará una foto y el clip a tu Telegram, sin gastar TURN.</p>
+    <label>Token del bot (te lo da @BotFather)</label>
+    <input id="tgToken" type="password" placeholder="123456789:AAxxxx..." autocapitalize="none" autocomplete="off">
+    <div class="row">
+      <button id="tgDetect" class="sec">1. Detectar mi chat</button>
+      <button id="tgTest" class="sec">2. Enviar prueba</button>
+    </div>
+    <button id="tgClear" class="sec" style="width:100%;margin-top:8px">Borrar datos de Telegram</button>
+    <p class="mut" id="tgMsg"></p>
+  </div>
 </section>
 
 <!-- CÁMARA -->
@@ -97,6 +109,7 @@ input[type=range]{padding:0}
     <input type="range" id="sens" min="1" max="30" value="8">
     <label><input type="checkbox" id="recOn" checked style="width:auto"> Grabar un clip de 10 s al detectar movimiento</label>
     <p class="mut">Mantén esta pantalla abierta y el dispositivo enchufado. Los clips se guardan en la memoria de esta pestaña: descárgalos si los necesitas.</p>
+    <p class="mut" id="tgCamMsg"></p>
     <b>Eventos</b>
     <div id="events" class="mut">Sin eventos todavía.</div>
   </div>
@@ -235,6 +248,7 @@ $('startCam').onclick = async () => {
   });
   startPeer();
   startMotion();
+  tgStatus(getTg() ? '📨 Telegram activado: se enviarán fotos y clips.' : 'Telegram no configurado (opcional, se configura en la pantalla de inicio).');
 };
 
 async function startPeer() {
@@ -363,6 +377,7 @@ function onMotion() {
   const when = new Date();
   broadcast({ type: 'motion', t: when.toISOString() });
   addEvent(when, null);
+  tgNotify(when);
   if ($('recOn').checked && !recorder) recordClip(when);
 }
 
@@ -375,6 +390,7 @@ function recordClip(when) {
   recorder.onstop = () => {
     const blob = new Blob(chunks, { type: mime });
     addEvent(when, URL.createObjectURL(blob), mime.includes('mp4') ? 'mp4' : 'webm');
+    tgSendClip(blob, mime, when);
     recorder = null;
   };
   recorder.start();
@@ -394,6 +410,67 @@ function addEvent(when, url, ext) {
     if (el) el.lastElementChild.outerHTML = '<a href="' + url + '" download="movimiento-' + when.getTime() + '.' + ext + '">Descargar</a>';
   }
 }
+
+/* ============ TELEGRAM (avisos desde la cámara) ============ */
+function getTg() { try { return JSON.parse(localStorage.getItem('vigia-tg') || 'null'); } catch { return null; } }
+function tgStatus(t) { const el = $('tgCamMsg'); if (el) el.textContent = t; }
+async function tgCall(method, token, body) {
+  const r = await fetch('https://api.telegram.org/bot' + token + '/' + method, { method: 'POST', body });
+  const j = await r.json().catch(() => ({}));
+  if (!j.ok) throw new Error(j.description || ('error ' + r.status));
+  return j.result;
+}
+async function tgNotify(when) {
+  const t = getTg(); if (!t) return;
+  try {
+    const v = $('camVideo'); const c = document.createElement('canvas');
+    c.width = v.videoWidth; c.height = v.videoHeight; c.getContext('2d').drawImage(v, 0, 0);
+    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', .8));
+    const fd = new FormData(); fd.append('chat_id', t.chat);
+    fd.append('caption', '🚶 Movimiento · ' + when.toLocaleString());
+    fd.append('photo', blob, 'movimiento.jpg');
+    await tgCall('sendPhoto', t.token, fd);
+    tgStatus('📨 Foto enviada a Telegram (' + when.toLocaleTimeString() + ').');
+  } catch (e) { tgStatus('⚠️ Telegram (foto): ' + e.message); }
+}
+async function tgSendClip(blob, mime, when) {
+  const t = getTg(); if (!t) return;
+  if (blob.size > 50 * 1024 * 1024) return tgStatus('⚠️ El clip pesa más de 50 MB y no se envía.');
+  try {
+    const mp4 = mime.includes('mp4');
+    const fd = new FormData(); fd.append('chat_id', t.chat);
+    fd.append('caption', '🎞️ Clip · ' + when.toLocaleString());
+    fd.append(mp4 ? 'video' : 'document', blob, 'movimiento-' + when.getTime() + (mp4 ? '.mp4' : '.webm'));
+    await tgCall(mp4 ? 'sendVideo' : 'sendDocument', t.token, fd);
+    tgStatus('📨 Clip enviado a Telegram (' + when.toLocaleTimeString() + ').');
+  } catch (e) { tgStatus('⚠️ Telegram (clip): ' + e.message); }
+}
+(() => {
+  const msg = t => { $('tgMsg').textContent = t; };
+  const cur = getTg();
+  if (cur) { $('tgToken').value = cur.token; msg('✅ Telegram configurado en este dispositivo.'); }
+  $('tgDetect').onclick = async () => {
+    const token = $('tgToken').value.trim();
+    if (!token) return msg('Pega primero el token del bot.');
+    msg('Buscando tu chat…');
+    try {
+      const ups = await tgCall('getUpdates', token, new FormData());
+      const last = ups.map(u => u.message || u.edited_message || u.channel_post).filter(Boolean).pop();
+      if (!last) return msg('No veo mensajes. Abre tu bot en Telegram, pulsa Iniciar (o escribe "hola") y vuelve a pulsar este botón.');
+      localStorage.setItem('vigia-tg', JSON.stringify({ token, chat: last.chat.id }));
+      msg('✅ Chat detectado y guardado. Ahora pulsa "Enviar prueba".');
+    } catch (e) { msg('❌ ' + e.message); }
+  };
+  $('tgTest').onclick = async () => {
+    const t = getTg(); if (!t) return msg('Primero pulsa "Detectar mi chat".');
+    try {
+      const fd = new FormData(); fd.append('chat_id', t.chat); fd.append('text', '✅ Vigía conectado. Aquí recibirás los avisos de movimiento.');
+      await tgCall('sendMessage', t.token, fd);
+      msg('✅ Prueba enviada. Mira tu Telegram.');
+    } catch (e) { msg('❌ ' + e.message); }
+  };
+  $('tgClear').onclick = () => { localStorage.removeItem('vigia-tg'); $('tgToken').value = ''; msg('Datos de Telegram borrados.'); };
+})();
 
 /* ============ MODO VISOR ============ */
 let vpeer, vconn, vstream, vrec = null, vchunks = [];
