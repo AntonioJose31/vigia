@@ -24,6 +24,7 @@ input{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);ba
 label{display:block;color:var(--mut);font-size:13px;margin:10px 0 4px}
 video{width:100%;background:#000;border-radius:12px;max-height:60dvh}
 .hide{display:none!important}
+#blackout{position:fixed;inset:0;background:#000;z-index:9999;display:flex;align-items:flex-end;justify-content:center;padding-bottom:24px;color:#222;font-size:12px}
 .mut{color:var(--mut);font-size:14px}
 .code{font-size:32px;letter-spacing:4px;font-weight:700;text-align:center;margin:8px 0}
 .badge{display:inline-block;padding:4px 10px;border-radius:99px;font-size:13px;background:#2a2e38}
@@ -77,6 +78,7 @@ input[type=range]{padding:0}
       <div class="row">
         <button class="sec" id="copyLink">🔗 Copiar enlace</button>
         <button class="sec" id="swapCam">🔄 Cambiar cámara</button>
+        <button class="sec" id="blackBtn">⬛ Pantalla negra</button>
       </div>
       <p class="mut">Viewers conectados: <span class="badge" id="viewers">0</span> · <span id="camStatus">Conectando…</span></p>
     </div>
@@ -108,6 +110,7 @@ input[type=range]{padding:0}
     <div id="alertBox"></div>
     <video id="remote" autoplay playsinline></video>
     <p class="mut" style="margin:8px 0 0">Conexión: <span class="badge" id="connType">detectando…</span></p>
+    <p class="mut" style="margin:6px 0 0">Pantalla de la cámara: <span class="badge" id="blackState">comprobando…</span></p>
     <div class="row">
       <button class="sec" id="vSwap">🔄 Cámara</button>
       <button class="sec" id="vTorch">🔦 Linterna</button>
@@ -117,6 +120,7 @@ input[type=range]{padding:0}
       <button class="sec" id="vSnap">📸 Foto</button>
       <button class="sec" id="vRec">⏺ Grabar</button>
       <button class="sec" id="vFull">⛶ Pantalla completa</button>
+      <button class="sec" id="vBlack">⬛ Pantalla negra (cámara)</button>
     </div>
     <div class="row">
       <button class="sec" id="vMute">🔇 Activar audio</button>
@@ -204,6 +208,7 @@ async function startPeer() {
         if (msg.type === 'auth' && msg.pin === pinValue) {
           ok = true; authed.add(conn); updateViewers();
           conn.send({ type: 'auth', ok: true });
+          conn.send({ type: 'blackState', on: !!$('blackout') });
           const call = peer.call(conn.peer, stream);
           calls.push(call);
           call.on('close', () => { const i = calls.indexOf(call); if (i > -1) calls.splice(i, 1); });
@@ -226,6 +231,7 @@ async function handleCmd(msg, conn) {
   if (msg.type === 'swap') swapCamera();
   if (msg.type === 'torch') toggleTorch();
   if (msg.type === 'siren') siren();
+  if (msg.type === 'black') toggleBlack();
   if (msg.type === 'snap') {
     const c = document.createElement('canvas'); const v = $('camVideo');
     c.width = v.videoWidth; c.height = v.videoHeight; c.getContext('2d').drawImage(v, 0, 0);
@@ -255,6 +261,17 @@ async function toggleTorch() {
   torchOn = !torchOn;
   try { await t.applyConstraints({ advanced: [{ torch: torchOn }] }); } catch {}
 }
+
+/* --- Pantalla negra (capa negra; el vídeo sigue activo por debajo) --- */
+function toggleBlack() {
+  let el = $('blackout');
+  if (el) { el.remove(); broadcast({ type: 'blackState', on: false }); return; }
+  el = document.createElement('div'); el.id = 'blackout'; el.textContent = 'Toca para mostrar la pantalla';
+  el.onclick = () => { el.remove(); broadcast({ type: 'blackState', on: false }); };
+  document.body.appendChild(el);
+  broadcast({ type: 'blackState', on: true });
+}
+$('blackBtn').onclick = toggleBlack;
 
 function siren() {
   if (sirenCtx) { clearInterval(sirenTimer); sirenCtx.close(); sirenCtx = null; return; }
@@ -381,6 +398,11 @@ function onViewerData(m) {
     beep();
     if (Notification.permission === 'granted') new Notification('Vigía', { body: 'Movimiento detectado a las ' + t });
   }
+  if (m.type === 'blackState') {
+    $('blackState').textContent = m.on ? '⬛ Negra (apagada)' : '💡 Encendida';
+    $('blackState').classList.toggle('on', !m.on);
+    $('vBlack').textContent = m.on ? '💡 Encender pantalla (cámara)' : '⬛ Pantalla negra (cámara)';
+  }
   if (m.type === 'snap') { const a = document.createElement('a'); a.href = m.data; a.download = 'foto-' + Date.now() + '.jpg'; a.click(); }
 }
 
@@ -395,6 +417,7 @@ function beep() {
 $('vSwap').onclick = () => vconn.send({ type: 'swap' });
 $('vTorch').onclick = () => vconn.send({ type: 'torch' });
 $('vSiren').onclick = () => vconn.send({ type: 'siren' });
+$('vBlack').onclick = () => vconn.send({ type: 'black' });
 $('vSnap').onclick = () => vconn.send({ type: 'snap' });
 $('vFull').onclick = () => $('remote').requestFullscreen?.();
 $('vMute').onclick = () => {
