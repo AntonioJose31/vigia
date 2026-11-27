@@ -16,13 +16,14 @@ h1{font-size:22px;margin:8px 0 16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
 button{background:var(--ac);color:#fff;border:0;border-radius:10px;padding:12px 16px;font-size:16px;cursor:pointer}
 button.sec{background:#2a2e38}
+button.tg.on{background:var(--ok)}
 button.red{background:var(--red)}
 button:disabled{opacity:.5}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .row>*{flex:1;min-width:120px}
 input{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:#0f1115;color:var(--tx);font-size:16px}
 label{display:block;color:var(--mut);font-size:13px;margin:10px 0 4px}
-video{width:100%;background:#000;border-radius:12px;max-height:60dvh}
+video{width:100%;background:#000;border-radius:12px;max-height:60dvh;margin-top:10px}
 .hide{display:none!important}
 select{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:#0f1115;color:var(--tx);font-size:16px}
 #blackout{position:fixed;inset:0;background:#000;z-index:9999;display:flex;align-items:flex-end;justify-content:center;padding-bottom:24px;color:#222;font-size:12px}
@@ -31,9 +32,14 @@ select{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);b
 .badge{display:inline-block;padding:4px 10px;border-radius:99px;font-size:13px;background:#2a2e38}
 .badge.on{background:var(--ok)}
 .alert{background:var(--red);color:#fff;padding:10px 14px;border-radius:10px;margin:10px 0;font-weight:600}
-.ev{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+.ev{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
 .ev a{color:var(--ac)}
+.camhead{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.lvl{height:10px;background:#2a2e38;border-radius:6px;position:relative;overflow:hidden;margin-top:6px}
+.lvl i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--ok)}
+.lvl b{position:absolute;top:0;bottom:0;width:3px;background:var(--red)}
 input[type=range]{padding:0}
+input[type=checkbox]{width:auto}
 </style>
 </head>
 <body>
@@ -46,12 +52,12 @@ input[type=range]{padding:0}
     <p>Convierte un dispositivo en cámara y mira desde otro (móvil o PC).</p>
     <div class="row">
       <button id="goCam">📷 Usar como cámara</button>
-      <button id="goView" class="sec">📺 Ver una cámara</button>
+      <button id="goView" class="sec">📺 Ver mis cámaras</button>
     </div>
   </div>
   <div class="card">
     <b>🌐 Conexión desde cualquier red (TURN, opcional)</b>
-    <p class="mut">Si la cámara no conecta desde datos móviles, crea una cuenta gratuita en metered.ca → Open Relay y pega aquí tus datos. Hazlo en la cámara y en el visor.</p>
+    <p class="mut">Si la cámara no conecta desde datos móviles, crea una cuenta gratuita en metered.ca → Open Relay y pega aquí tus datos. Hazlo en la cámara y en el monitor.</p>
     <label>Nombre de tu app (la parte antes de .metered.live)</label>
     <input id="turnApp" placeholder="miapp" autocapitalize="none">
     <label>API Key</label>
@@ -64,7 +70,7 @@ input[type=range]{padding:0}
   </div>
   <div class="card">
     <b>📨 Avisos por Telegram (opcional)</b>
-    <p class="mut">Hazlo en el teléfono que hace de cámara. Al detectar movimiento enviará una foto y el clip a tu Telegram, sin gastar TURN.</p>
+    <p class="mut">Hazlo en el teléfono que hace de cámara. Al detectar movimiento o ruido enviará una foto y el clip a tu Telegram, sin gastar TURN.</p>
     <label>Token del bot (te lo da @BotFather)</label>
     <input id="tgToken" type="password" placeholder="123456789:AAxxxx..." autocapitalize="none" autocomplete="off">
     <div class="row">
@@ -81,6 +87,8 @@ input[type=range]{padding:0}
   <div class="card">
     <video id="camVideo" autoplay muted playsinline></video>
     <div id="camSetup">
+      <label>Nombre de esta cámara (aparece en los avisos de Telegram)</label>
+      <input id="camName" maxlength="30" autocomplete="off" placeholder="Ej: Salón">
       <label>Código de la cámara (lo eliges tú y no cambia)</label>
       <input id="camCodeIn" maxlength="24" autocapitalize="characters" autocomplete="off" placeholder="Ej: CASA-ANTONIO-7391">
       <p class="mut" style="margin:6px 0 0">De 6 a 24 caracteres: letras, números y guiones. Si lo dejas vacío se crea uno aleatorio y se queda fijo. Haz que sea difícil de adivinar: junto con el PIN es lo que protege tu cámara.</p>
@@ -102,15 +110,24 @@ input[type=range]{padding:0}
         <button class="sec" id="swapCam">🔄 Cambiar cámara</button>
         <button class="sec" id="blackBtn">⬛ Pantalla negra</button>
       </div>
-      <p class="mut">Viewers conectados: <span class="badge" id="viewers">0</span> · <span id="camStatus">Conectando…</span></p>
+      <p class="mut">Monitores conectados: <span class="badge" id="viewers">0</span> · <span id="camStatus">Conectando…</span></p>
     </div>
   </div>
   <div class="card hide" id="camOpts">
-    <b>Detección de movimiento</b>
-    <label><input type="checkbox" id="motionOn" checked style="width:auto"> Activada</label>
+    <b>🏃 Detección de movimiento</b>
+    <label><input type="checkbox" id="motionOn" checked> Activada (si la apagas, no detecta nada)</label>
     <label>Sensibilidad</label>
     <input type="range" id="sens" min="1" max="30" value="8">
-    <label><input type="checkbox" id="recOn" checked style="width:auto"> Grabar un clip de 10 s al detectar movimiento</label>
+    <label><input type="checkbox" id="recOn" checked> Grabar un clip de 10 s al detectar movimiento o ruido</label>
+    <label><input type="checkbox" id="chainOn" checked> Seguir grabando clips (hasta 6 seguidos) mientras haya movimiento</label>
+    <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
+    <b>🔊 Detector de ruido</b>
+    <label><input type="checkbox" id="soundOn"> Activado (si lo apagas, no detecta nada)</label>
+    <label>Sensibilidad (más alta = salta con ruidos más suaves)</label>
+    <input type="range" id="soundSens" min="1" max="30" value="12">
+    <div class="lvl"><i id="lvlBar"></i><b id="lvlThr"></b></div>
+    <p class="mut" style="margin:6px 0 0">La barra verde es el ruido actual y la línea roja el umbral: salta cuando la barra la supera. Ajústalo hablando o dando una palmada.</p>
+    <label><input type="checkbox" id="soundTgOn"> Enviar a Telegram los clips de ruido</label>
     <p class="mut">Mantén esta pantalla abierta y el dispositivo enchufado. Los clips se guardan en la memoria de esta pestaña: descárgalos si los necesitas.</p>
     <p class="mut" id="tgCamMsg"></p>
     <b>Eventos</b>
@@ -119,42 +136,24 @@ input[type=range]{padding:0}
   <button class="sec" id="backCam" style="width:100%">← Salir</button>
 </section>
 
-<!-- VISOR -->
+<!-- MONITOR -->
 <section id="view" class="hide">
-  <div class="card" id="viewConnect">
+  <div id="camList"></div>
+  <div class="card">
+    <b>➕ Añadir cámara</b>
+    <label>Nombre</label>
+    <input id="acName" maxlength="30" autocomplete="off" placeholder="Ej: Salón">
     <label>Código de la cámara</label>
-    <input id="vCode" placeholder="ABC123" autocapitalize="characters">
+    <input id="acCode" maxlength="24" autocapitalize="characters" autocomplete="off" placeholder="CASA-ANTONIO-7391">
     <label>PIN</label>
-    <input id="vPin" inputmode="numeric" placeholder="1234">
-    <button id="connect" style="width:100%;margin-top:12px">Conectar</button>
-    <p class="mut" id="vMsg"></p>
+    <input id="acPin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN de la cámara">
+    <label><input type="checkbox" id="acRemember"> Recordar el PIN en este dispositivo (más cómodo, pero quien use este teléfono podrá ver la cámara)</label>
+    <button id="acSave" style="width:100%;margin-top:12px">Guardar cámara</button>
+    <p class="mut" id="acMsg"></p>
   </div>
-  <div class="card hide" id="viewLive">
-    <div id="alertBox"></div>
-    <video id="remote" autoplay playsinline></video>
-    <p class="mut" style="margin:8px 0 0">Conexión: <span class="badge" id="connType">detectando…</span></p>
-    <p class="mut" style="margin:6px 0 0">Pantalla de la cámara: <span class="badge" id="blackState">comprobando…</span></p>
-    <label>Calidad del vídeo (menos calidad = menos datos)</label>
-    <select id="vQual">
-      <option value="low">Baja · ahorra más datos</option>
-      <option value="mid">Media</option>
-      <option value="high">Alta · gasta más</option>
-    </select>
-    <div class="row">
-      <button class="sec" id="vSwap">🔄 Cámara</button>
-      <button class="sec" id="vTorch">🔦 Linterna</button>
-      <button class="sec" id="vSiren">🚨 Sirena</button>
-    </div>
-    <div class="row">
-      <button class="sec" id="vSnap">📸 Foto</button>
-      <button class="sec" id="vRec">⏺ Grabar</button>
-      <button class="sec" id="vFull">⛶ Pantalla completa</button>
-      <button class="sec" id="vBlack">⬛ Pantalla negra (cámara)</button>
-    </div>
-    <div class="row">
-      <button class="sec" id="vMute">🔇 Activar audio</button>
-      <button class="sec" id="vNotif">🔔 Activar avisos</button>
-    </div>
+  <div class="card">
+    <button class="sec" id="vNotif" style="width:100%">🔔 Activar avisos del navegador</button>
+    <p class="mut">Avisan de movimiento o ruido solo mientras esta página esté abierta. Para recibir avisos con la app cerrada, usa Telegram.</p>
   </div>
   <button class="sec" id="backView" style="width:100%">← Salir</button>
 </section>
@@ -166,6 +165,8 @@ const $ = id => document.getElementById(id);
 const show = id => { ['home','cam','view'].forEach(s => $(s).classList.toggle('hide', s !== id)); };
 const PREFIX = 'vigia-';
 const STUN = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }];
+const CODE_RE = /^[A-Z0-9][A-Z0-9-]{4,22}[A-Z0-9]$/;
+const pickMime = () => ['video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'].find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m));
 function getTurnCfg() { try { return JSON.parse(localStorage.getItem('vigia-turn') || 'null'); } catch { return null; } }
 // Devuelve las opciones de PeerJS; si hay TURN configurado, lo añade a los servidores ICE.
 async function iceOpts() {
@@ -188,11 +189,14 @@ $('backCam').onclick = () => location.search ? (location.href = location.pathnam
 $('backView').onclick = $('backCam').onclick;
 
 /* ============ MODO CÁMARA ============ */
-let peer, stream, facing = 'environment', wakeLock, pinValue = '', code = '';
+let peer, stream, facing = 'environment', wakeLock, pinValue = '', code = '', camName = '';
 let fixedCode = '', idRetries = 0, fails = 0, lockUntil = 0;
-try { const sc = localStorage.getItem('vigia-camcode'); if (sc) $('camCodeIn').value = sc; } catch {}
-const authed = new Set();      // conexiones de datos autenticadas
-const calls = [];              // llamadas activas
+try {
+  const sc = localStorage.getItem('vigia-camcode'); if (sc) $('camCodeIn').value = sc;
+  const sn = localStorage.getItem('vigia-camname'); if (sn) $('camName').value = sn;
+} catch {}
+const authed = new Set();      // conexiones de datos autenticadas (monitores)
+const calls = [];              // llamadas de vídeo activas
 let torchOn = false;
 let sirenCtx = null, sirenTimer = null;
 
@@ -208,11 +212,12 @@ async function getStream() {
   const q = QUAL[qual];
   return navigator.mediaDevices.getUserMedia({
     video: { facingMode: facing, width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: q.fps } },
-    audio: true
+    // Sin procesado de audio para que el detector de ruido vea niveles reales.
+    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
   });
 }
 
-// Limita el bitrate que se envía a cada visor (es lo que más reduce el gasto de datos/TURN).
+// Limita el bitrate que se envía a cada monitor (es lo que más reduce el gasto de datos/TURN).
 function applyBitrate() {
   calls.forEach(c => c.peerConnection?.getSenders().forEach(async s => {
     if (s.track?.kind !== 'video') return;
@@ -231,18 +236,27 @@ async function applyQuality(k) {
   const q = QUAL[k], t = stream?.getVideoTracks()[0];
   try { await t?.applyConstraints({ width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: q.fps } }); } catch {}
   applyBitrate();
-  broadcast({ type: 'qualityState', q: k });
+  pushState();
 }
+
+// Estado que ven los monitores (se envía al conectar y cada vez que cambia algo).
+function stateMsg() {
+  return { type: 'state', motion: $('motionOn').checked, sound: $('soundOn').checked, soundTg: $('soundTgOn').checked,
+           quality: qual, black: !!$('blackout'), tg: !!getTg(), name: camName };
+}
+function pushState() { broadcast(stateMsg()); }
+['motionOn', 'soundOn', 'soundTgOn'].forEach(id => $(id).addEventListener('change', pushState));
 
 $('startCam').onclick = async () => {
   pinValue = $('pin').value.trim();
   qual = $('qual').value;
   let cc = $('camCodeIn').value.trim().toUpperCase();
   if (!cc) cc = rndCode();
-  if (!/^[A-Z0-9][A-Z0-9-]{4,22}[A-Z0-9]$/.test(cc)) return alert('El código debe tener entre 6 y 24 caracteres: letras, números y guiones (sin empezar ni acabar en guion).');
-  fixedCode = cc; $('camCodeIn').value = cc;
-  try { localStorage.setItem('vigia-camcode', cc); } catch {}
+  if (!CODE_RE.test(cc)) return alert('El código debe tener entre 6 y 24 caracteres: letras, números y guiones (sin empezar ni acabar en guion).');
   if (!/^\d{4,8}$/.test(pinValue)) return alert('El PIN debe tener entre 4 y 8 dígitos.');
+  fixedCode = cc; $('camCodeIn').value = cc;
+  camName = $('camName').value.trim().slice(0, 30) || 'Cámara';
+  try { localStorage.setItem('vigia-camcode', cc); localStorage.setItem('vigia-camname', camName); } catch {}
   try {
     stream = await getStream();
   } catch (e) {
@@ -258,6 +272,7 @@ $('startCam').onclick = async () => {
   });
   startPeer();
   startMotion();
+  startSound();
   tgStatus(getTg() ? '📨 Telegram activado: se enviarán fotos y clips.' : 'Telegram no configurado (opcional, se configura en la pantalla de inicio).');
 };
 
@@ -286,12 +301,8 @@ async function startPeer() {
         if (msg.type === 'auth' && msg.pin === pinValue) {
           fails = 0; ok = true; authed.add(conn); updateViewers();
           conn.send({ type: 'auth', ok: true });
-          conn.send({ type: 'blackState', on: !!$('blackout') });
-          conn.send({ type: 'qualityState', q: qual });
-          const call = peer.call(conn.peer, stream);
-          calls.push(call);
-          setTimeout(applyBitrate, 1500); setTimeout(applyBitrate, 5000);
-          call.on('close', () => { const i = calls.indexOf(call); if (i > -1) calls.splice(i, 1); });
+          conn.send(stateMsg());
+          // El vídeo ya no se envía solo: el monitor lo pide cuando quiere verlo.
         } else {
           if (++fails >= 5) { lockUntil = Date.now() + 10 * 60 * 1000; fails = 0; }
           conn.send({ type: 'auth', ok: false });
@@ -301,14 +312,46 @@ async function startPeer() {
       }
       handleCmd(msg, conn);
     });
-    conn.on('close', () => { authed.delete(conn); updateViewers(); });
+    conn.on('close', () => { closeVideo(conn); authed.delete(conn); updateViewers(); });
   });
 }
 
-function updateViewers() { $('viewers').textContent = authed.size; $('viewers').classList.toggle('on', authed.size > 0); }
+function updateViewers() {
+  const n = authed.size, v = [...authed].filter(c => c._call).length;
+  $('viewers').textContent = n + ' (viendo vídeo: ' + v + ')';
+  $('viewers').classList.toggle('on', n > 0);
+}
 function broadcast(m) { authed.forEach(c => { try { c.send(m); } catch {} }); }
 
+// Envía el vídeo a un monitor solo cuando lo pide (así el modo "solo control" casi no gasta datos).
+function setVideo(conn, on) {
+  if (on && !conn._call) {
+    const call = peer.call(conn.peer, stream);
+    conn._call = call; calls.push(call);
+    call.on('close', () => {
+      const i = calls.indexOf(call); if (i > -1) calls.splice(i, 1);
+      if (conn._call === call) conn._call = null;
+      updateViewers();
+    });
+    setTimeout(applyBitrate, 1500); setTimeout(applyBitrate, 5000);
+  } else if (!on && conn._call) {
+    try { conn._call.close(); } catch {}
+  }
+  updateViewers();
+}
+function closeVideo(conn) { try { conn._call?.close(); } catch {} }
+
+function setFlag(key, on) {
+  const id = { motion: 'motionOn', sound: 'soundOn', soundTg: 'soundTgOn' }[key];
+  if (!id) return;
+  $(id).checked = on;
+  $(id).dispatchEvent(new Event('change'));
+}
+
 async function handleCmd(msg, conn) {
+  if (msg.type === 'video') setVideo(conn, !!msg.on);
+  if (msg.type === 'set') setFlag(msg.key, !!msg.on);
+  if (msg.type === 'sendclip') manualClip(conn);
   if (msg.type === 'swap') swapCamera();
   if (msg.type === 'torch') toggleTorch();
   if (msg.type === 'siren') siren();
@@ -333,6 +376,7 @@ async function swapCamera() {
     }));
     old.getAudioTracks().forEach(t => t.stop());
     torchOn = false;
+    startSound();
   } catch (e) { alert('No se pudo cambiar de cámara: ' + e.message); }
 }
 $('swapCam').onclick = swapCamera;
@@ -347,11 +391,11 @@ async function toggleTorch() {
 /* --- Pantalla negra (capa negra; el vídeo sigue activo por debajo) --- */
 function toggleBlack() {
   let el = $('blackout');
-  if (el) { el.remove(); broadcast({ type: 'blackState', on: false }); return; }
+  if (el) { el.remove(); pushState(); return; }
   el = document.createElement('div'); el.id = 'blackout'; el.textContent = 'Toca para mostrar la pantalla';
-  el.onclick = () => { el.remove(); broadcast({ type: 'blackState', on: false }); };
+  el.onclick = () => { el.remove(); pushState(); };
   document.body.appendChild(el);
-  broadcast({ type: 'blackState', on: true });
+  pushState();
 }
 $('blackBtn').onclick = toggleBlack;
 
@@ -370,8 +414,65 @@ $('copyLink').onclick = async () => {
   catch { prompt('Copia este enlace:', url); }
 };
 
+/* --- Eventos, grabación de clips y clips seguidos --- */
+const KIND = { motion: '🚶 Movimiento', sound: '🔊 Ruido', manual: '📨 Clip solicitado' };
+const MAXCHAIN = 6;
+let prev = null, lastAlert = 0, recorder = null, lastMotionAt = 0, chainCooldown = 0;
+
+function addEvent(when, kind, rec, part) {
+  const box = $('events');
+  if (box.classList.contains('mut') && box.textContent.startsWith('Sin')) { box.textContent = ''; box.classList.remove('mut'); }
+  const el = document.createElement('div'); el.className = 'ev'; el.dataset.t = when.getTime();
+  const a = document.createElement('span');
+  a.textContent = KIND[kind] + (part > 1 ? ' (parte ' + part + ')' : '') + ' · ' + when.toLocaleString();
+  const b = document.createElement('span'); b.className = 'mut'; b.textContent = rec ? 'grabando…' : '';
+  el.append(a, b); box.prepend(el);
+  while (box.children.length > 30) {
+    const last = box.lastElementChild, link = last.querySelector('a');
+    if (link) URL.revokeObjectURL(link.href);
+    last.remove();
+  }
+}
+function finishEvent(when, url, ext) {
+  const el = $('events').querySelector('[data-t="' + when.getTime() + '"]'); if (!el) return;
+  const a = document.createElement('a'); a.href = url; a.download = 'clip-' + when.getTime() + '.' + ext; a.textContent = 'Descargar';
+  el.lastElementChild.replaceWith(a);
+}
+
+// Graba un clip. 'kind' = motion | sound | manual. Los de movimiento se encadenan mientras siga habiendo movimiento.
+function recordClip(kind, when, n = 1, dur = 10000) {
+  const mime = pickMime(); if (!mime || !stream) return false;
+  const chunks = [];
+  const rc = new MediaRecorder(stream, { mimeType: mime }); recorder = rc;
+  rc.ondataavailable = e => e.data.size && chunks.push(e.data);
+  rc.onstop = () => {
+    if (recorder === rc) recorder = null;
+    const blob = new Blob(chunks, { type: mime });
+    finishEvent(when, URL.createObjectURL(blob), mime.includes('mp4') ? 'mp4' : 'webm');
+    const toTg = kind === 'motion' || kind === 'manual' || rc._force || (kind === 'sound' && $('soundTgOn').checked);
+    if (toTg) tgSendClip(blob, mime, when, camLabel() + KIND[kind] + (n > 1 ? ' · parte ' + n : '') + ' · ' + when.toLocaleString());
+    if (kind === 'motion' && $('chainOn').checked && $('motionOn').checked && Date.now() - lastMotionAt < 4000) {
+      if (n < MAXCHAIN) { const w = new Date(); addEvent(w, 'motion', true, n + 1); recordClip('motion', w, n + 1); }
+      else { chainCooldown = Date.now() + 60000; tgStatus('⏸️ Límite de clips seguidos alcanzado: pausa de 1 minuto para no saturar Telegram.'); }
+    }
+  };
+  rc.start();
+  setTimeout(() => rc.state !== 'inactive' && rc.stop(), dur);
+  return true;
+}
+
+// Un monitor pide que la cámara grabe unos segundos y lo envíe a Telegram.
+function manualClip(conn) {
+  const say = msg => { try { conn.send({ type: 'toast', msg }); } catch {} };
+  if (!getTg()) return say('⚠️ Esta cámara no tiene Telegram configurado.');
+  if (recorder) { recorder._force = true; return say('🎬 Ya había un clip grabándose: se enviará a Telegram en cuanto termine.'); }
+  const when = new Date();
+  addEvent(when, 'manual', true);
+  if (recordClip('manual', when, 1, 15000)) say('🎬 Grabando 15 s. Llegará a Telegram en unos segundos.');
+  else say('⚠️ No se pudo grabar en este navegador.');
+}
+
 /* --- Movimiento --- */
-let prev = null, lastAlert = 0, recorder = null;
 function startMotion() {
   const c = document.createElement('canvas'); c.width = 64; c.height = 48;
   const ctx = c.getContext('2d', { willReadFrequently: true });
@@ -386,7 +487,10 @@ function startMotion() {
       let ch = 0; for (let i = 0; i < g.length; i++) if (Math.abs(g[i] - prev[i]) > 25) ch++;
       const pct = ch / g.length * 100;
       const thr = 31 - $('sens').value;   // más sensibilidad => umbral más bajo
-      if (pct > thr / 3 && Date.now() - lastAlert > 8000) onMotion();
+      if (pct > thr / 3) {
+        lastMotionAt = Date.now();
+        if (!recorder && Date.now() > chainCooldown && Date.now() - lastAlert > 8000) onMotion();
+      }
     }
     prev = g;
   }, 500);
@@ -394,51 +498,68 @@ function startMotion() {
 
 function onMotion() {
   lastAlert = Date.now();
-  const when = new Date();
+  const when = new Date(), rec = $('recOn').checked;
   broadcast({ type: 'motion', t: when.toISOString() });
-  addEvent(when, null);
+  addEvent(when, 'motion', rec);
   tgNotify(when);
-  if ($('recOn').checked && !recorder) recordClip(when);
+  if (rec) recordClip('motion', when, 1);
 }
 
-function recordClip(when) {
-  const mime = ['video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'].find(m => MediaRecorder.isTypeSupported(m));
-  if (!mime) return;
-  const chunks = [];
-  recorder = new MediaRecorder(stream, { mimeType: mime });
-  recorder.ondataavailable = e => e.data.size && chunks.push(e.data);
-  recorder.onstop = () => {
-    const blob = new Blob(chunks, { type: mime });
-    addEvent(when, URL.createObjectURL(blob), mime.includes('mp4') ? 'mp4' : 'webm');
-    tgSendClip(blob, mime, when);
-    recorder = null;
-  };
-  recorder.start();
-  setTimeout(() => recorder && recorder.state !== 'inactive' && recorder.stop(), 10000);
+/* --- Ruido --- */
+let audioCtx = null, analyser = null, soundBuf = null, soundHits = [], lastSoundAlert = 0, soundTimer = null;
+function startSound() {
+  try { audioCtx?.close(); } catch {}
+  clearInterval(soundTimer);
+  const at = stream?.getAudioTracks()[0]; if (!at) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  audioCtx.resume?.();
+  const src = audioCtx.createMediaStreamSource(new MediaStream([at]));
+  // Ventana de ~43 ms leída cada 50 ms: se vigila todo el audio sin huecos, incluso ruidos muy breves.
+  analyser = audioCtx.createAnalyser(); analyser.fftSize = 2048; src.connect(analyser);
+  soundBuf = new Float32Array(analyser.fftSize);
+  soundTimer = setInterval(checkSound, 50);
 }
-
-function addEvent(when, url, ext) {
-  const box = $('events');
-  if (box.classList.contains('mut') && box.textContent.startsWith('Sin')) { box.textContent = ''; box.classList.remove('mut'); }
-  const label = when.toLocaleString();
-  if (!url) {
-    const el = document.createElement('div'); el.className = 'ev'; el.dataset.t = when.getTime();
-    el.innerHTML = '<span>🚶 Movimiento · ' + label + '</span><span class="mut">grabando…</span>';
-    box.prepend(el);
-  } else {
-    const el = box.querySelector('[data-t="' + when.getTime() + '"]');
-    if (el) el.lastElementChild.outerHTML = '<a href="' + url + '" download="movimiento-' + when.getTime() + '.' + ext + '">Descargar</a>';
-  }
+const soundThreshold = () => 0.25 * Math.pow(0.85, +$('soundSens').value);
+function checkSound() {
+  if (!analyser) return;
+  analyser.getFloatTimeDomainData(soundBuf);
+  let s = 0; for (let i = 0; i < soundBuf.length; i++) s += soundBuf[i] * soundBuf[i];
+  const rms = Math.sqrt(s / soundBuf.length), thr = soundThreshold();
+  $('lvlBar').style.width = Math.min(100, rms / 0.3 * 100) + '%';
+  $('lvlThr').style.left = Math.min(100, thr / 0.3 * 100) + '%';
+  if (!$('soundOn').checked) { soundHits = []; return; }
+  const now = Date.now();
+  if (rms > thr) soundHits.push(now);
+  soundHits = soundHits.filter(t => now - t < 400);
+  // Salta con 2 lecturas por encima del umbral en 0,4 s (ignora un chasquido suelto) y como máximo cada 15 s.
+  if (soundHits.length >= 2 && now - lastSoundAlert > 15000) { soundHits = []; onSound(); }
+}
+function onSound() {
+  lastSoundAlert = Date.now();
+  const when = new Date(), rec = $('recOn').checked && !recorder;
+  broadcast({ type: 'sound', t: when.toISOString() });
+  addEvent(when, 'sound', rec);
+  if ($('soundTgOn').checked) tgText(camLabel() + '🔊 Ruido detectado · ' + when.toLocaleString());
+  if (rec) recordClip('sound', when, 1);
 }
 
 /* ============ TELEGRAM (avisos desde la cámara) ============ */
 function getTg() { try { return JSON.parse(localStorage.getItem('vigia-tg') || 'null'); } catch { return null; } }
 function tgStatus(t) { const el = $('tgCamMsg'); if (el) el.textContent = t; }
+const camLabel = () => '[' + (camName || 'Cámara') + '] ';
 async function tgCall(method, token, body) {
   const r = await fetch('https://api.telegram.org/bot' + token + '/' + method, { method: 'POST', body });
   const j = await r.json().catch(() => ({}));
   if (!j.ok) throw new Error(j.description || ('error ' + r.status));
   return j.result;
+}
+async function tgText(text) {
+  const t = getTg(); if (!t) return;
+  try {
+    const fd = new FormData(); fd.append('chat_id', t.chat); fd.append('text', text);
+    await tgCall('sendMessage', t.token, fd);
+    tgStatus('📨 Aviso enviado a Telegram (' + new Date().toLocaleTimeString() + ').');
+  } catch (e) { tgStatus('⚠️ Telegram (aviso): ' + e.message); }
 }
 async function tgNotify(when) {
   const t = getTg(); if (!t) return;
@@ -447,20 +568,20 @@ async function tgNotify(when) {
     c.width = v.videoWidth; c.height = v.videoHeight; c.getContext('2d').drawImage(v, 0, 0);
     const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', .8));
     const fd = new FormData(); fd.append('chat_id', t.chat);
-    fd.append('caption', '🚶 Movimiento · ' + when.toLocaleString());
+    fd.append('caption', camLabel() + '🚶 Movimiento · ' + when.toLocaleString());
     fd.append('photo', blob, 'movimiento.jpg');
     await tgCall('sendPhoto', t.token, fd);
     tgStatus('📨 Foto enviada a Telegram (' + when.toLocaleTimeString() + ').');
   } catch (e) { tgStatus('⚠️ Telegram (foto): ' + e.message); }
 }
-async function tgSendClip(blob, mime, when) {
+async function tgSendClip(blob, mime, when, caption) {
   const t = getTg(); if (!t) return;
   if (blob.size > 50 * 1024 * 1024) return tgStatus('⚠️ El clip pesa más de 50 MB y no se envía.');
   try {
     const mp4 = mime.includes('mp4');
     const fd = new FormData(); fd.append('chat_id', t.chat);
-    fd.append('caption', '🎞️ Clip · ' + when.toLocaleString());
-    fd.append(mp4 ? 'video' : 'document', blob, 'movimiento-' + when.getTime() + (mp4 ? '.mp4' : '.webm'));
+    fd.append('caption', caption || ('🎞️ Clip · ' + when.toLocaleString()));
+    fd.append(mp4 ? 'video' : 'document', blob, 'clip-' + when.getTime() + (mp4 ? '.mp4' : '.webm'));
     await tgCall(mp4 ? 'sendVideo' : 'sendDocument', t.token, fd);
     tgStatus('📨 Clip enviado a Telegram (' + when.toLocaleTimeString() + ').');
   } catch (e) { tgStatus('⚠️ Telegram (clip): ' + e.message); }
@@ -484,7 +605,7 @@ async function tgSendClip(blob, mime, when) {
   $('tgTest').onclick = async () => {
     const t = getTg(); if (!t) return msg('Primero pulsa "Detectar mi chat".');
     try {
-      const fd = new FormData(); fd.append('chat_id', t.chat); fd.append('text', '✅ Vigía conectado. Aquí recibirás los avisos de movimiento.');
+      const fd = new FormData(); fd.append('chat_id', t.chat); fd.append('text', '✅ Vigía conectado. Aquí recibirás los avisos de movimiento y ruido.');
       await tgCall('sendMessage', t.token, fd);
       msg('✅ Prueba enviada. Mira tu Telegram.');
     } catch (e) { msg('❌ ' + e.message); }
@@ -492,66 +613,12 @@ async function tgSendClip(blob, mime, when) {
   $('tgClear').onclick = () => { localStorage.removeItem('vigia-tg'); $('tgToken').value = ''; msg('Datos de Telegram borrados.'); };
 })();
 
-/* ============ MODO VISOR ============ */
-let vpeer, vconn, vstream, vrec = null, vchunks = [];
-$('connect').onclick = async () => {
-  const c = $('vCode').value.trim().toUpperCase(), pin = $('vPin').value.trim();
-  if (!c || !pin) return ($('vMsg').textContent = 'Introduce código y PIN.');
-  $('vMsg').textContent = 'Conectando…'; $('connect').disabled = true;
-  try { localStorage.setItem('vigia-lastcode', c); } catch {}
-  vpeer = new Peer(await iceOpts());
-  vpeer.on('error', e => { $('vMsg').textContent = e.type === 'peer-unavailable' ? 'No se encuentra esa cámara. Comprueba el código.' : 'Error: ' + e.type; $('connect').disabled = false; });
-  vpeer.on('open', () => {
-    vconn = vpeer.connect(PREFIX + c, { reliable: true });
-    vconn.on('open', () => vconn.send({ type: 'auth', pin }));
-    vconn.on('data', onViewerData);
-    vconn.on('close', () => { $('vMsg').textContent = ''; alert('Se perdió la conexión con la cámara.'); location.reload(); });
-  });
-  vpeer.on('call', call => {
-    call.answer();
-    call.on('stream', s => {
-      vstream = s; $('remote').srcObject = s;
-      $('viewConnect').classList.add('hide'); $('viewLive').classList.remove('hide');
-      watchConn(call.peerConnection);
-    });
-  });
-};
-
-// Indica si el vídeo va directo o por relay (TURN), mirando el par de candidatos ICE elegido.
-function watchConn(pc) {
-  const el = $('connType');
-  const check = async () => {
-    try {
-      const stats = await pc.getStats();
-      let pair = null;
-      stats.forEach(r => { if (r.type === 'transport' && r.selectedCandidatePairId) pair = stats.get(r.selectedCandidatePairId); });
-      if (!pair) stats.forEach(r => { if (r.type === 'candidate-pair' && (r.selected || (r.nominated && r.state === 'succeeded'))) pair = r; });
-      if (!pair) return;
-      const l = stats.get(pair.localCandidateId), r = stats.get(pair.remoteCandidateId);
-      const relay = l?.candidateType === 'relay' || r?.candidateType === 'relay';
-      el.textContent = relay ? '🔁 Por relay (gasta TURN)' : '⚡ Directa (sin TURN)';
-      el.classList.toggle('on', !relay);
-    } catch {}
-  };
-  check(); setInterval(check, 3000);
-}
-
-function onViewerData(m) {
-  if (m.type === 'auth' && !m.ok) { $('vMsg').textContent = m.locked ? 'Demasiados intentos fallidos. Espera 10 minutos.' : 'PIN incorrecto.'; $('connect').disabled = false; }
-  if (m.type === 'motion') {
-    const box = $('alertBox'); const t = new Date(m.t).toLocaleTimeString();
-    box.innerHTML = '<div class="alert">🚶 Movimiento detectado · ' + t + '</div>';
-    beep();
-    if (Notification.permission === 'granted') new Notification('Vigía', { body: 'Movimiento detectado a las ' + t });
-  }
-  if (m.type === 'blackState') {
-    $('blackState').textContent = m.on ? '⬛ Negra (apagada)' : '💡 Encendida';
-    $('blackState').classList.toggle('on', !m.on);
-    $('vBlack').textContent = m.on ? '💡 Encender pantalla (cámara)' : '⬛ Pantalla negra (cámara)';
-  }
-  if (m.type === 'qualityState') $('vQual').value = m.q;
-  if (m.type === 'snap') { const a = document.createElement('a'); a.href = m.data; a.download = 'foto-' + Date.now() + '.jpg'; a.click(); }
-}
+/* ============ MODO MONITOR (lista de cámaras) ============ */
+const CAMS_KEY = 'vigia-cams';
+function getCams() { try { return JSON.parse(localStorage.getItem(CAMS_KEY) || '[]'); } catch { return []; } }
+function saveCams(a) { try { localStorage.setItem(CAMS_KEY, JSON.stringify(a)); } catch {} }
+const R = {};                       // código -> estado y elementos de cada tarjeta
+let mpeer = null, mpeerLoading = null;
 
 function beep() {
   try {
@@ -561,35 +628,239 @@ function beep() {
   } catch {}
 }
 
-$('vSwap').onclick = () => vconn.send({ type: 'swap' });
-$('vTorch').onclick = () => vconn.send({ type: 'torch' });
-$('vSiren').onclick = () => vconn.send({ type: 'siren' });
-$('vBlack').onclick = () => vconn.send({ type: 'black' });
-$('vQual').onchange = () => vconn.send({ type: 'quality', q: $('vQual').value });
-$('vSnap').onclick = () => vconn.send({ type: 'snap' });
-$('vFull').onclick = () => $('remote').requestFullscreen?.();
-$('vMute').onclick = () => {
-  const v = $('remote'); v.muted = !v.muted; v.play();
-  $('vMute').textContent = v.muted ? '🔇 Activar audio' : '🔊 Silenciar';
+const setBadge = (r, t, on) => { const b = r.q('.cStat'); b.textContent = t; b.classList.toggle('on', !!on); };
+const setMsg = (r, t) => { r.q('.cMsg').textContent = t || ''; };
+const send = (c, msg) => { const k = R[c]?.conn; if (k && k.open) k.send(msg); };
+
+function addCard(cam) {
+  if (R[cam.code]) return;
+  const el = document.createElement('div'); el.className = 'card cam';
+  el.innerHTML =
+    '<div class="camhead"><b class="cName"></b><span class="badge cStat">Desconectada</span></div>' +
+    '<div class="mut cCode"></div>' +
+    '<div class="cPinBox"><label>PIN</label><input class="cPin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN de esta cámara"></div>' +
+    '<div class="row"><button class="cConn">🔌 Conectar</button><button class="sec cDel">🗑 Quitar</button></div>' +
+    '<p class="mut cMsg"></p>' +
+    '<div class="cPanel hide">' +
+      '<div class="cAlert"></div>' +
+      '<video class="cVid hide" autoplay muted playsinline></video>' +
+      '<p class="mut cInfo" style="margin:6px 0 0"></p>' +
+      '<div class="row"><button class="sec cLive">▶ Ver directo</button><button class="sec cSend">📨 Enviar vídeo a Telegram</button></div>' +
+      '<div class="row"><button class="sec tg cMotion">🏃 Movimiento</button><button class="sec tg cSound">🔊 Ruido</button><button class="sec tg cSoundTg">📨 Ruido → Telegram</button></div>' +
+      '<label>Calidad del vídeo (menos calidad = menos datos)</label>' +
+      '<select class="cQual"><option value="low">Baja · ahorra más datos</option><option value="mid">Media</option><option value="high">Alta · gasta más</option></select>' +
+      '<div class="row"><button class="sec cSwap">🔄 Cámara</button><button class="sec cTorch">🔦 Linterna</button><button class="sec cSiren">🚨 Sirena</button><button class="sec cBlack">⬛ Pantalla negra</button></div>' +
+      '<div class="row cVidCtl hide"><button class="sec cSnap">📸 Foto</button><button class="sec cRec">⏺ Grabar</button><button class="sec cFull">⛶ Pantalla completa</button><button class="sec cMute">🔇 Activar audio</button></div>' +
+    '</div>';
+  const r = R[cam.code] = { cam, el, q: s => el.querySelector(s), conn: null, call: null, st: {}, live: false, authed: false, mrec: null, vstream: null };
+  const c = cam.code;
+  r.q('.cName').textContent = cam.name;
+  r.q('.cCode').textContent = 'Código: ' + cam.code;
+  if (cam.pin) r.q('.cPinBox').classList.add('hide');
+  r.q('.cConn').onclick = () => r.conn ? disconnectCam(c) : connectCam(c);
+  r.q('.cDel').onclick = () => {
+    if (!confirm('¿Quitar "' + cam.name + '" de la lista?')) return;
+    disconnectCam(c); el.remove(); delete R[c]; saveCams(getCams().filter(x => x.code !== c));
+  };
+  r.q('.cLive').onclick = () => {
+    if (r.live) return stopLive(c);
+    r.q('.cLive').textContent = '⏳ Pidiendo vídeo…'; send(c, { type: 'video', on: true });
+  };
+  r.q('.cSend').onclick = () => send(c, { type: 'sendclip' });
+  r.q('.cMotion').onclick = () => send(c, { type: 'set', key: 'motion', on: !r.st.motion });
+  r.q('.cSound').onclick = () => send(c, { type: 'set', key: 'sound', on: !r.st.sound });
+  r.q('.cSoundTg').onclick = () => send(c, { type: 'set', key: 'soundTg', on: !r.st.soundTg });
+  r.q('.cQual').onchange = () => send(c, { type: 'quality', q: r.q('.cQual').value });
+  r.q('.cSwap').onclick = () => send(c, { type: 'swap' });
+  r.q('.cTorch').onclick = () => send(c, { type: 'torch' });
+  r.q('.cSiren').onclick = () => send(c, { type: 'siren' });
+  r.q('.cBlack').onclick = () => send(c, { type: 'black' });
+  r.q('.cSnap').onclick = () => send(c, { type: 'snap' });
+  r.q('.cFull').onclick = () => r.q('.cVid').requestFullscreen?.();
+  r.q('.cMute').onclick = () => {
+    const v = r.q('.cVid'); v.muted = !v.muted; v.play();
+    r.q('.cMute').textContent = v.muted ? '🔇 Activar audio' : '🔊 Silenciar';
+  };
+  r.q('.cRec').onclick = () => toggleRec(r);
+  $('camList').appendChild(el);
+}
+
+function waitOpen(p) {
+  return new Promise((res, rej) => {
+    if (p.open) return res();
+    const t = setTimeout(() => rej(new Error('tiempo agotado')), 15000);
+    p.on('open', () => { clearTimeout(t); res(); });
+  });
+}
+function wirePeer(p) {
+  p.on('error', onMonitorError);
+  p.on('disconnected', () => { try { p.reconnect(); } catch {} });
+  p.on('call', call => {
+    const r = R[call.peer.replace(PREFIX, '')];
+    if (!r || !r.conn) { call.close(); return; }
+    r.call = call;
+    call.on('stream', s => {
+      r.vstream = s; const v = r.q('.cVid'); v.srcObject = s;
+      v.classList.remove('hide'); r.q('.cVidCtl').classList.remove('hide');
+      setLive(r, true); watchPc(r, call.peerConnection, 'Vídeo');
+    });
+    call.on('close', () => {
+      if (r.call !== call) return;
+      r.call = null; setLive(r, false);
+      r.q('.cVid').classList.add('hide'); r.q('.cVidCtl').classList.add('hide'); r.q('.cVid').srcObject = null;
+      if (r.mrec) { try { r.mrec.stop(); } catch {} }
+      if (r.conn) watchPc(r, r.conn.peerConnection, 'Control');
+    });
+    call.answer();
+  });
+}
+function getMonitorPeer() {
+  if (mpeer && !mpeer.destroyed && !mpeer.disconnected) return Promise.resolve(mpeer);
+  if (!mpeerLoading) mpeerLoading = (async () => {
+    try {
+      if (mpeer && !mpeer.destroyed) { mpeer.reconnect(); await waitOpen(mpeer); return mpeer; }
+      const p = new Peer(await iceOpts()); mpeer = p; wirePeer(p); await waitOpen(p); return p;
+    } finally { mpeerLoading = null; }
+  })();
+  return mpeerLoading;
+}
+function onMonitorError(e) {
+  if (e.type === 'peer-unavailable') {
+    const m = /vigia-([A-Z0-9-]+)/i.exec(e.message || ''), r = m && R[m[1].toUpperCase()];
+    if (r && !r.authed) camClosed(r.cam.code, 'No se encuentra esa cámara. ¿Está encendida y el código es correcto?');
+    return;
+  }
+  Object.values(R).forEach(r => { if (r.conn && !r.authed) camClosed(r.cam.code, 'Error de conexión: ' + e.type); });
+}
+
+async function connectCam(c) {
+  const r = R[c]; if (!r || r.conn) return;
+  const pin = r.cam.pin || r.q('.cPin').value.trim();
+  if (!pin) return setMsg(r, 'Escribe el PIN de esta cámara.');
+  setMsg(r, 'Conectando…'); setBadge(r, 'Conectando…'); r.q('.cConn').disabled = true;
+  let p;
+  try { p = await getMonitorPeer(); }
+  catch (e) { r.q('.cConn').disabled = false; setBadge(r, 'Desconectada'); return setMsg(r, 'No se pudo contactar con el servidor de Vigía: ' + (e.message || e)); }
+  const conn = p.connect(PREFIX + c, { reliable: true });
+  r.conn = conn;
+  r.timer = setTimeout(() => {
+    if (r.conn === conn && !r.authed) camClosed(c, 'Sin respuesta. ¿La cámara está encendida? Desde datos móviles puede hacer falta TURN.');
+  }, 20000);
+  conn.on('open', () => conn.send({ type: 'auth', pin }));
+  conn.on('data', m => onCamData(c, m));
+  conn.on('close', () => { if (r.conn === conn) camClosed(c, 'La conexión se cerró.'); });
+  conn.on('error', e => { if (r.conn === conn) camClosed(c, 'Error de conexión: ' + (e.type || e)); });
+}
+
+function resetCard(r) {
+  r.authed = false; r.call = null; r.live = false; r.st = {};
+  r.q('.cPanel').classList.add('hide'); r.q('.cVid').classList.add('hide'); r.q('.cVidCtl').classList.add('hide');
+  r.q('.cVid').srcObject = null; r.q('.cInfo').textContent = ''; r.q('.cAlert').replaceChildren();
+  r.q('.cConn').textContent = '🔌 Conectar'; r.q('.cConn').disabled = false; r.q('.cLive').textContent = '▶ Ver directo';
+  if (!r.cam.pin) r.q('.cPinBox').classList.remove('hide');
+  setBadge(r, 'Desconectada', false);
+}
+function teardown(r) {
+  clearTimeout(r.timer); clearInterval(r.wt);
+  if (r.mrec) { try { r.mrec.stop(); } catch {} }
+  try { r.call?.close(); } catch {}
+  const k = r.conn; r.conn = null; try { k?.close(); } catch {}
+}
+function disconnectCam(c) { const r = R[c]; if (!r) return; teardown(r); resetCard(r); setMsg(r, ''); }
+function camClosed(c, msg) { const r = R[c]; if (!r) return; teardown(r); resetCard(r); setMsg(r, msg); }
+
+function setLive(r, on) { r.live = on; r.q('.cLive').textContent = on ? '⏹ Parar directo' : '▶ Ver directo'; }
+function stopLive(c) { const r = R[c]; if (!r) return; send(c, { type: 'video', on: false }); try { r.call?.close(); } catch {} }
+
+// Indica si la conexión va directa o por relay (TURN), mirando el par de candidatos ICE elegido.
+function watchPc(r, pc, label) {
+  clearInterval(r.wt);
+  if (!pc) return;
+  const check = async () => {
+    try {
+      const stats = await pc.getStats();
+      let pair = null;
+      stats.forEach(x => { if (x.type === 'transport' && x.selectedCandidatePairId) pair = stats.get(x.selectedCandidatePairId); });
+      if (!pair) stats.forEach(x => { if (x.type === 'candidate-pair' && (x.selected || (x.nominated && x.state === 'succeeded'))) pair = x; });
+      if (!pair) return;
+      const l = stats.get(pair.localCandidateId), rm = stats.get(pair.remoteCandidateId);
+      const relay = l?.candidateType === 'relay' || rm?.candidateType === 'relay';
+      r.q('.cInfo').textContent = label + ': ' + (relay ? '🔁 por relay (gasta TURN)' : '⚡ directa (sin TURN)');
+    } catch {}
+  };
+  check(); r.wt = setInterval(check, 4000);
+}
+
+function applyState(r, s) {
+  r.st = s;
+  const t = (sel, on, a, b) => { const bt = r.q(sel); bt.textContent = on ? a : b; bt.classList.toggle('on', !!on); };
+  t('.cMotion', s.motion, '🏃 Movimiento: ✅ ON', '🏃 Movimiento: ⛔ OFF');
+  t('.cSound', s.sound, '🔊 Ruido: ✅ ON', '🔊 Ruido: ⛔ OFF');
+  t('.cSoundTg', s.soundTg, '📨 Ruido → Telegram: ✅ SÍ', '📨 Ruido → Telegram: ⛔ NO');
+  t('.cBlack', s.black, '💡 Encender pantalla', '⬛ Pantalla negra');
+  if (s.quality) r.q('.cQual').value = s.quality;
+}
+
+function onCamData(c, m) {
+  const r = R[c]; if (!r) return;
+  if (m.type === 'auth') {
+    if (m.ok) {
+      clearTimeout(r.timer); r.authed = true;
+      setBadge(r, 'Conectada', true); setMsg(r, '');
+      r.q('.cPanel').classList.remove('hide'); r.q('.cPinBox').classList.add('hide');
+      r.q('.cConn').disabled = false; r.q('.cConn').textContent = '⏏ Desconectar';
+      watchPc(r, r.conn.peerConnection, 'Control');
+    } else {
+      camClosed(c, m.locked ? 'Demasiados intentos fallidos. Espera 10 minutos.' : 'PIN incorrecto.' + (r.cam.pin ? ' Quita la cámara y vuelve a añadirla con el PIN nuevo.' : ''));
+    }
+    return;
+  }
+  if (m.type === 'state') applyState(r, m);
+  if (m.type === 'toast') setMsg(r, m.msg);
+  if (m.type === 'motion' || m.type === 'sound') {
+    const label = m.type === 'motion' ? '🚶 Movimiento' : '🔊 Ruido', t = new Date(m.t).toLocaleTimeString();
+    const d = document.createElement('div'); d.className = 'alert'; d.textContent = label + ' detectado · ' + t;
+    r.q('.cAlert').replaceChildren(d);
+    beep();
+    if ('Notification' in window && Notification.permission === 'granted') new Notification('Vigía · ' + r.cam.name, { body: label + ' a las ' + t });
+  }
+  if (m.type === 'snap') { const a = document.createElement('a'); a.href = m.data; a.download = 'foto-' + Date.now() + '.jpg'; a.click(); }
+}
+
+function toggleRec(r) {
+  if (r.mrec) { r.mrec.stop(); return; }
+  const mime = pickMime();
+  if (!mime || !r.vstream) return alert('Grabación no disponible en este navegador.');
+  const chunks = [], m = new MediaRecorder(r.vstream, { mimeType: mime }); r.mrec = m;
+  m.ondataavailable = e => e.data.size && chunks.push(e.data);
+  m.onstop = () => {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(chunks, { type: mime }));
+    a.download = 'grabacion-' + Date.now() + (mime.includes('mp4') ? '.mp4' : '.webm'); a.click();
+    r.mrec = null; r.q('.cRec').textContent = '⏺ Grabar'; r.q('.cRec').classList.remove('red');
+  };
+  m.start(); r.q('.cRec').textContent = '⏹ Detener'; r.q('.cRec').classList.add('red');
+}
+
+$('acSave').onclick = () => {
+  const msg = t => { $('acMsg').textContent = t; };
+  const name = $('acName').value.trim().slice(0, 30), c = $('acCode').value.trim().toUpperCase(), pin = $('acPin').value.trim();
+  if (!name) return msg('Ponle un nombre.');
+  if (!CODE_RE.test(c)) return msg('Código no válido: de 6 a 24 caracteres, con letras, números y guiones.');
+  const cams = getCams();
+  if (cams.some(x => x.code === c)) return msg('Esa cámara ya está en la lista.');
+  const cam = { name, code: c };
+  if ($('acRemember').checked && pin) cam.pin = pin;
+  cams.push(cam); saveCams(cams); addCard(cam);
+  if (!cam.pin && pin) R[c].q('.cPin').value = pin;   // para conectar ahora sin volver a escribirlo
+  ['acName', 'acCode', 'acPin'].forEach(i => { $(i).value = ''; });
+  msg('✅ Cámara añadida a la lista.');
 };
 $('vNotif').onclick = async () => {
   if (!('Notification' in window)) return alert('Este navegador no admite avisos.');
   const p = await Notification.requestPermission();
   $('vNotif').textContent = p === 'granted' ? '🔔 Avisos activados' : '🔕 Avisos bloqueados';
 };
-$('vRec').onclick = () => {
-  if (vrec) { vrec.stop(); return; }
-  const mime = ['video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'].find(m => MediaRecorder.isTypeSupported(m));
-  if (!mime || !vstream) return alert('Grabación no disponible en este navegador.');
-  vchunks = []; vrec = new MediaRecorder(vstream, { mimeType: mime });
-  vrec.ondataavailable = e => e.data.size && vchunks.push(e.data);
-  vrec.onstop = () => {
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(vchunks, { type: mime }));
-    a.download = 'grabacion-' + Date.now() + (mime.includes('mp4') ? '.mp4' : '.webm'); a.click();
-    vrec = null; $('vRec').textContent = '⏺ Grabar'; $('vRec').classList.remove('red');
-  };
-  vrec.start(); $('vRec').textContent = '⏹ Detener'; $('vRec').classList.add('red');
-};
+getCams().forEach(addCard);
 
 /* ============ AJUSTES TURN ============ */
 (() => {
@@ -614,8 +885,7 @@ $('vRec').onclick = () => {
 
 /* ============ ENLACE DIRECTO + PWA ============ */
 const q = new URLSearchParams(location.search).get('v');
-if (q) { show('view'); $('vCode').value = q.toUpperCase(); }
-else { try { const lc = localStorage.getItem('vigia-lastcode'); if (lc) $('vCode').value = lc; } catch {} }
+if (q) { show('view'); $('acCode').value = q.toUpperCase(); }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
